@@ -9,8 +9,9 @@ import os
 import re
 import urllib
 
-
+from rfc6266 import build_header
 from restkit.util import to_bytestring, url_quote, url_encode
+
 
 MIME_BOUNDARY = 'END_OF_PART'
 CRLF = '\r\n'
@@ -29,11 +30,10 @@ class BoundaryItem(object):
             value = self.encode_unreadable_value(value)
             self.size = len(value)
         self.value = value
+
         if fname is not None:
-            if isinstance(fname, unicode):
-                fname = fname.encode("utf-8").encode("string_escape").replace('"', '\\"')
-            else:
-                fname = fname.encode("string_escape").replace('"', '\\"')
+            if not isinstance(fname, unicode):
+                fname = fname.decode("utf-8")
         self.fname = fname
         if filetype is not None:
             filetype = to_bytestring(filetype)
@@ -56,10 +56,14 @@ class BoundaryItem(object):
             self._encoded_bdr = boundary
             headers = ["--%s" % boundary]
             if self.fname:
-                disposition = 'form-data; name="%s"; filename="%s"' % (self.name,
-                        self.fname)
+                disposition = build_header(
+                    self.fname,
+                    disposition='form-data',
+                    name=self.name
+                ).encode()
             else:
                 disposition = 'form-data; name="%s"' % self.name
+
             headers.append("Content-Disposition: %s" % disposition)
             if self.filetype:
                 filetype = self.filetype
@@ -77,7 +81,6 @@ class BoundaryItem(object):
         value = self.value
         if re.search("^--%s$" % re.escape(boundary), value, re.M):
             raise ValueError("boundary found in encoded string")
-
         return "%s%s%s" % (self.encode_hdr(boundary), value, CRLF)
 
     def iter_encode(self, boundary, blocksize=16384):
